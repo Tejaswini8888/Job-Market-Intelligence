@@ -1,0 +1,47 @@
+# ==========================================================
+# Job Market Intelligence Platform - FastAPI backend
+# backend/requirements.txt
+#
+# SCOPE: the REST API in backend/ (uvicorn -> backend.app.main:app).
+#
+# It imports three existing layers, so the shared dependencies are re-declared
+# here to make the API self-contained in a container:
+#
+#   src/data/queries.py      -> psycopg, python-dotenv, pandas (variables from .env)
+#   dashboard/components.py  -> streamlit, plotly (only pure functions are used)
+#   ml/recommender.py        -> scikit-learn
+#
+# INSTALL (Windows PowerShell):
+#   python -m venv .venv
+#   .\.venv\Scripts\Activate.ps1
+#   python -m pip install -r backend\requirements.txt
+#
+# RUN THE API:
+#   python -m uvicorn backend.app.main:app --reload
+# ==========================================================
+
+# psycopg 3.x - the PostgreSQL driver (shared with src/data).
+psycopg[binary]>=3.1
+
+# Reads DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD from .env.
+python-dotenv>=1.0
+
+# DataFrames returned by every query function the API serves.
+pandas>=2.0
+
+# The dashboard's pure Skill Gap Analyzer + error redaction helpers.
+streamlit>=1.40
+plotly>=5.20
+
+# The TF-IDF role recommender (ml/recommender.py).
+scikit-learn>=1.3
+
+# The API itself.
+fastapi>=0.110
+
+# ASGI server for local runs and the Dockerfile CMD.
+uvicorn>=0.23
+
+# Test runner + the FastAPI TestClient transport (tests/test_api.py).
+pytest>=7.4
+httpx>=0.27

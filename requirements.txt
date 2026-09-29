@@ -1,0 +1,64 @@
+# ==========================================================
+# Job Market Intelligence & Skill Analytics Platform
+# requirements.txt
+#
+# SCOPE: the Python data-access layer (src/data/) and the
+#         Streamlit dashboard (dashboard/).
+#
+#   Data access
+#     psycopg        -> PostgreSQL driver (psycopg 3)
+#     python-dotenv  -> reads connection settings from the .env file
+#     pandas         -> every query function returns a pandas DataFrame
+#     pytest         -> automated tests for the connection layer
+#
+#   Dashboard
+#     streamlit      -> the dashboard app (dashboard/app.py)
+#     plotly         -> the charts. Streamlit 1.64+ no longer installs
+#                       Plotly for you, and it is imported directly by
+#                       dashboard/components.py, so it is declared here.
+#
+#   Role Recommendation Engine
+#     scikit-learn   -> TF-IDF vectors and cosine similarity (ml/recommender.py).
+#                       The only ML dependency: the engine runs entirely
+#                       locally on the small synthetic dataset and contacts
+#                       no external service.
+#
+# NOT included on purpose (later stages, not built yet):
+#   FastAPI, TensorFlow, PyTorch, LangChain, boto3, docker,
+#   and anything else from the roadmap.
+#
+# INSTALL (Windows PowerShell):
+#   python -m venv .venv
+#   .\.venv\Scripts\Activate.ps1
+#   python -m pip install --upgrade pip
+#   python -m pip install -r requirements.txt
+#
+# RUN THE DASHBOARD:
+#   streamlit run dashboard/app.py
+# ==========================================================
+
+# psycopg 3.x - the modern PostgreSQL driver for Python.
+# [binary] ships pre-compiled wheels, so no C build tools are needed locally.
+psycopg[binary]>=3.1
+
+# Reads DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD from .env.
+python-dotenv>=1.0
+
+# DataFrames returned by every function in src/data/queries.py, and the
+# frame every chart in the dashboard is built from.
+pandas>=2.0
+
+# Test runner for tests/.
+pytest>=7.4
+
+# The dashboard itself.
+streamlit>=1.40
+
+# Interactive charts (dashboard/components.py imports plotly.express).
+plotly>=5.20
+
+# ML: TF-IDF vectors and cosine similarity for the Role Recommendation Engine
+# (ml/recommender.py). This is the ONLY ML dependency in the project - there is
+# no TensorFlow, PyTorch, LangChain, or any external model/API client, because
+# the recommender must run entirely locally on a small synthetic dataset.
+scikit-learn>=1.3

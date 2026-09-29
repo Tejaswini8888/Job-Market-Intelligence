@@ -1,0 +1,146 @@
+# ==========================================================
+# JOB MARKET INTELLIGENCE & SKILL ANALYTICS PLATFORM
+# .github/workflows/ci.yml
+#
+# Continuous integration for every push and every pull request.
+#
+# WHAT THIS WORKFLOW DOES
+#   1. Checks the repository out.
+#   2. Sets up Python 3.11 (the version used locally).
+#   3. Starts a PostgreSQL 18 service container.
+#   4. Waits until PostgreSQL actually accepts connections.
+#   5. Builds the test database from database/schema.sql + database/seed.sql.
+#   6. Verifies the seeded row counts.
+#   7. Runs the full pytest suite against that database.
+#   8. Validates the Docker Compose configuration.
+#
+# SECRET SAFETY
+#   The only credentials here are CI-ONLY throwaway values that exist for
+#   the lifetime of one workflow run. No personal password, API key, token,
+#   or production credential is stored in this file or anywhere in the repo.
+#   The real .env is git-ignored and never reaches the runner.
+# ==========================================================
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# The workflow only needs to read the repository.
+permissions:
+  contents: read
+
+# A new push to the same branch cancels the run still in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (pytest + PostgreSQL 18)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # ---- CI-only, throwaway database credentials --------------------
+      # These are NOT secrets: they are created for this workflow run, are
+      # attached to an ephemeral container, and are discarded afterwards.
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: job_market_intelligence
+      DB_USER: postgres
+      DB_PASSWORD: ci_only_throwaway_password
+
+    services:
+      postgres:
+        # PostgreSQL 18 matches the version used locally in docker-compose.yml.
+        # If a future runner image cannot pull it, change this to postgres:16.
+        image: postgres:18
+        env:
+          POSTGRES_DB: job_market_intelligence
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_only_throwaway_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d job_market_intelligence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Ensure the PostgreSQL client is available
+        # ubuntu-latest normally ships psql/pg_isready; install it only if not.
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+          psql --version
+
+      - name: Wait for PostgreSQL to be ready
+        env:
+          PGPASSWORD: ci_only_throwaway_password
+        run: |
+          for attempt in $(seq 1 30); do
+            if pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME"; then
+              echo "PostgreSQL is accepting connections."
+              exit 0
+            fi
+            echo "Attempt ${attempt}: PostgreSQL not ready yet, waiting..."
+            sleep 2
+          done
+          echo "PostgreSQL did not become ready in time." >&2
+          exit 1
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # backend/requirements.txt is the superset: it adds FastAPI, uvicorn
+          # and httpx on top of everything the data layer and dashboard need.
+          python -m pip install -r backend/requirements.txt
+
+      - name: Initialise the test database (schema + seed)
+        # The same two files the local stack uses. They are NOT modified for CI.
+        env:
+          PGPASSWORD: ci_only_throwaway_password
+        run: |
+          psql -v ON_ERROR_STOP=1 \
+                -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+                -f database/schema.sql
+          psql -v ON_ERROR_STOP=1 \
+                -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+                -f database/seed.sql
+
+      - name: Verify the seeded row counts
+        # Fails the run early with a readable message if the seed did not load,
+        # instead of letting pytest report a wall of confusing database errors.
+        env:
+          PGPASSWORD: ci_only_throwaway_password
+        run: |
+          psql -v ON_ERROR_STOP=1 -t -A \
+                -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+                -c "select 'companies=' || (select count(*) from companies)
+                      || ' jobs='      || (select count(*) from jobs)
+                      || ' skills='     || (select count(*) from skills)
+                      || ' job_skills=' || (select count(*) from job_skills);"
+
+      - name: Run the test suite
+        run: python -m pytest -q
+
+      - name: Validate the Docker Compose configuration
+        # --quiet validates the file and the variable substitution WITHOUT
+        # printing the resolved configuration, so no secret can reach the log.
+        # Nothing is built, pushed, or deployed here.
+        run: docker compose config --quiet

@@ -1,0 +1,205 @@
+# ==========================================================
+# Job Market Intelligence & Skill Analytics Platform
+# .gitignore  —  Python, VS Code, secrets, virtual environments,
+#                caches, and local PostgreSQL / dev data files
+# ==========================================================
+
+# ------------------------------------------------------------
+# Environment variables and secrets
+# ------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+.streamlit/secrets.toml
+.envrc
+aws-credentials
+*.tfvars
+*.tfvars.json
+
+# ------------------------------------------------------------
+# Virtual environments
+# ------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+.venv*/
+python_env/
+virtualenv/
+
+# ------------------------------------------------------------
+# Python caches and compiled files
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache
+nosetests.xml
+
+# ------------------------------------------------------------
+# Packaging / build artifacts
+# ------------------------------------------------------------
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+.installed.cfg
+MANIFEST
+pip-wheel-metadata/
+
+# ------------------------------------------------------------
+# Jupyter Notebook
+# ------------------------------------------------------------
+.ipynb_checkpoints/
+*checkpoint.ipynb
+profile_default/
+ipython_config.py
+
+# ------------------------------------------------------------
+# VS Code
+# ------------------------------------------------------------
+# The whole folder is ignored: local launch/debug settings can contain
+# absolute paths, tokens, or interpreter paths that must never be pushed.
+.vscode/
+*.code-workspace
+.history/
+*.swp
+*.swo
+
+# ------------------------------------------------------------
+# IDEs and editors
+# ------------------------------------------------------------
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+.vs/
+*.sw?
+.project
+.pydevproject
+.settings/
+
+# ------------------------------------------------------------
+# OS files
+# ------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------------------------
+# Local PostgreSQL / database files
+# ------------------------------------------------------------
+pgdata/
+pg_data/
+postgres/
+pgsql/
+pgsql-data/
+pg_dump/
+*.dump
+*.dump.gz
+*.backup
+*.sql.gz
+initdb/
+pg_wal/
+pg_xlog/
+postmaster.pid
+postmaster.opts
+pg_stat_tmp/
+pg_replslot/
+pg_log/
+pg_serial/
+
+# ------------------------------------------------------------
+# Local data files (raw data and processed data stay untracked)
+# ------------------------------------------------------------
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.dta
+*.sas7bdat
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+
+# ------------------------------------------------------------
+# Logs, temporary files, and local exports
+# ------------------------------------------------------------
+*.log
+logs/
+tmp/
+temp/
+.cache/
+reports/output/
+*.xlsx
+*.xls
+*.docx
+*.pdf
+*.pptx
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# ------------------------------------------------------------
+# Container and infrastructure local state
+# ------------------------------------------------------------
+docker-compose.override.yml
+docker/local/
+.docker/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Local Docker runtime data (never part of the source tree)
+volumes/
+pgdata/
+docker-data/
+.docker-data/
+compose.local.yml
+docker/*.local.*
+
+# ------------------------------------------------------------
+# Test and monitoring local output
+# ------------------------------------------------------------
+.pytest_cache/
+coverage/
+prometheus-data/
+grafana-data/
+*.db
+*.sqlite
+*.sqlite3

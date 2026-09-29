@@ -1,0 +1,77 @@
+# ==========================================================
+# Job Market Intelligence & Skill Analytics Platform
+# .dockerignore
+#
+# Defines the build context sent to `docker build` for BOTH images
+# (backend/ and dashboard/). Anything listed here never reaches an
+# image, so secrets and local-only state cannot leak in.
+# ==========================================================
+
+# ---- Secrets & credentials - NEVER copied into an image ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials/
+
+# ---- Virtual environments / interpreters ----
+.venv/
+venv/
+env/
+ENV/
+python_env/
+virtualenv/
+*.pyz
+
+# ---- Python caches & compiled files ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# ---- Version control ----
+.git/
+.gitignore
+.gitattributes
+
+# ---- Tests, notebooks, docs (not needed at runtime) ----
+tests/
+notebooks/
+docs/
+
+# ---- Local-only data & dev state ----
+data/
+.docker/
+reports/
+pgdata/
+pg_data/
+*.dump
+*.dump.gz
+*.sql.gz
+
+# ---- Compose / local config that the app itself never imports ----
+docker-compose.yml
+docker-compose.override.yml
+
+# ---- Logs & temp ----
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# ---- OS files ----
+.DS_Store
+Thumbs.db
+desktop.ini

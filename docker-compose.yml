@@ -1,0 +1,113 @@
+# ==========================================================
+# Job Market Intelligence & Skill Analytics Platform
+# docker-compose.yml
+#
+# Three services on one private network:
+#
+#   postgres  (:5432, internal only)   - PostgreSQL 18, schema + seed run once
+#   api       (:8000)                  - FastAPI backend
+#   dashboard (:8501)                  - Streamlit dashboard
+#
+# Credentials come from the project .env file via variable substitution -
+# NOTHING is hardcoded here. The database's host port is deliberately NOT
+# published: the API and dashboard reach it over the private network as
+# "postgres:5432", and no second PostgreSQL is exposed to the host.
+#
+# Useful commands:
+#   docker compose config          validate the file
+#   docker compose up -d           start the stack in the background
+#   docker compose ps              status + health
+#   docker compose logs <service>  follow one service's logs
+#   docker compose down            stop (keeps the database volume)
+#   docker compose down -v         stop AND delete the database volume, so the
+#                                  next `up` runs schema.sql + seed.sql again
+# ==========================================================
+
+name: job-market-intelligence
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: jmi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-job_market_intelligence}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      # postgres:18 stores data in a major-version subdirectory itself
+      # (/var/lib/postgresql/18/docker), so the volume mounts the parent dir.
+      # A fresh volume runs schema.sql + seed.sql (below) exactly once.
+      - postgres_data:/var/lib/postgresql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - jmi
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: jmi-api
+    restart: unless-stopped
+    environment:
+      # Inside Docker the database is the `postgres` SERVICE, never localhost.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-job_market_intelligence}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "8000:8000"
+    networks:
+      - jmi
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: jmi-dashboard
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-job_market_intelligence}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    networks:
+      - jmi
+
+volumes:
+  postgres_data:
+
+networks:
+  jmi:
+    driver: bridge

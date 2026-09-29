@@ -1,0 +1,22 @@
+# ==========================================================
+# Job Market Intelligence & Skill Analytics Platform
+# .streamlit/config.toml
+#
+# Sets the dark base theme so the dashboard's own CSS in
+# dashboard/styles.py has a dark canvas to work with, and stops
+# Streamlit from opening a browser tab or pinging for usage stats.
+# ==========================================================
+
+[theme]
+base = "dark"
+primaryColor = "#4c8dff"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#161d29"
+textColor = "#e6edf3"
+
+[server]
+headless = true
+runOnSave = true
+
+[browser]
+gatherUsageStats = false

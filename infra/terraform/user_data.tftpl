@@ -1,0 +1,202 @@
+#cloud-config
+# ==========================================================
+# Job Market Intelligence & Skill Analytics Platform
+# infra/terraform/user_data.tftpl
+#
+# cloud-init bootstrap for the EC2 host. Rendered by
+# templatefile() in ec2.tf, so every template expression below is a
+# Terraform variable (from locals.user_data_vars), not a shell
+# expansion. Shell expansions are written without braces, so this
+# template stays readable. To emit a literal dollar-brace in shell
+# text, write a doubled dollar sign first.
+#
+# WHAT IT DOES, IN ORDER
+#   1. Installs Docker Engine + the Compose v2 plugin from Docker's
+#      official apt repository.
+#   2. Installs the AWS CLI v2 - the Ubuntu image does not ship it -
+#      and waits for the instance-profile credentials.
+#   3. Clones (or fast-forwards) this repository at var.git_branch.
+#   4. Reads the database password from the SSM SecureString and writes
+#      a root-owned, 0600 .env file for docker-compose.yml.
+#   5. Runs `docker compose up -d --build` and waits for GET /health.
+#
+# WHAT IT DELIBERATELY DOES NOT DO
+#   * No secret is embedded here. The password is fetched at boot over
+#     HTTPS from SSM using the instance role, so it never appears in
+#     user-data, in the EC2 console, or in this file.
+#   * No file is changed in the application: only the repository's own
+#     docker-compose.yml and Dockerfiles are used, so the deployed
+#     behaviour matches the verified local stack exactly.
+#   * PostgreSQL is not touched here. Compose never publishes 5432, and
+#     no security-group rule opens it.
+#
+# LOGGING: everything lands in /var/log/jmi-bootstrap.log and in
+# /var/log/cloud-init-output.log. The password is never echoed.
+# ==========================================================
+
+write_files:
+  - path: /opt/jmi/bootstrap.sh
+    owner: "root:root"
+    permissions: "0700"
+    content: |
+      #!/usr/bin/env bash
+      #
+      # Rendered from infra/terraform/user_data.tftpl - do not edit on the
+      # instance; change the template and let Terraform replace user-data.
+      set -euo pipefail
+
+      # ---- values rendered by Terraform -------------------------------
+      APP_DIR="${app_dir}"
+      REPO_URL="${repo_url}"
+      GIT_BRANCH="${git_branch}"
+      PARAM_NAME="${ssm_parameter_name}"
+      AWS_REGION="${aws_region}"
+      DB_NAME="${db_name}"
+      DB_USER="${db_user}"
+      API_PORT="${api_port}"
+      DASHBOARD_PORT="${dashboard_port}"
+      BOOT_LOG=/var/log/jmi-bootstrap.log
+      # ----------------------------------------------------------------
+
+      # Mirror the whole bootstrap into a log the operator can read with:
+      #   sudo tail -f /var/log/jmi-bootstrap.log
+      exec > >(tee -a $BOOT_LOG) 2>&1
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] ===== bootstrap starting ====="
+
+      export DEBIAN_FRONTEND=noninteractive
+
+      # ----------------------------------------------------------------
+      # 1. Base packages
+      # ----------------------------------------------------------------
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] installing base packages"
+      apt-get update
+      apt-get install -y ca-certificates curl git gnupg unzip
+
+      # ----------------------------------------------------------------
+      # 2. Docker Engine + Compose v2 (official apt repository)
+      #    The repo root version is taken from /etc/os-release, so this
+      #    keeps working on future Ubuntu LTS images.
+      # ----------------------------------------------------------------
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] installing Docker"
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      chmod a+r /etc/apt/keyrings/docker.asc
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      systemctl enable --now docker
+      systemctl is-active --quiet docker
+      docker --version
+      docker compose version
+
+      # ----------------------------------------------------------------
+      # 3. AWS CLI v2 (not present in the Ubuntu image)
+      # ----------------------------------------------------------------
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] installing AWS CLI v2"
+      curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+      unzip -q -o /tmp/awscliv2.zip -d /tmp
+      /tmp/aws/install --update
+      rm -rf /tmp/awscliv2.zip /tmp/aws
+
+      # ----------------------------------------------------------------
+      # 4. Wait for the instance profile to publish credentials to IMDS
+      # ----------------------------------------------------------------
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] waiting for instance credentials"
+      for attempt in $(seq 1 30); do
+        if aws sts get-caller-identity --region $AWS_REGION >/dev/null 2>&1; then
+          echo "instance credentials available"
+          break
+        fi
+        if [ $attempt -eq 30 ]; then
+          echo "ERROR: no instance credentials after 30 attempts - check the IAM instance profile" >&2
+          exit 1
+        fi
+        sleep 5
+      done
+
+      # ----------------------------------------------------------------
+      # 5. Source code
+      #    A re-run of cloud-init (or a manual re-bootstrap) fast-forwards
+      #    the existing checkout instead of failing on a non-empty dir.
+      # ----------------------------------------------------------------
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] fetching source from $REPO_URL ($GIT_BRANCH)"
+      mkdir -p $(dirname $APP_DIR)
+      if [ -d $APP_DIR/.git ]; then
+        git -C $APP_DIR fetch --depth 1 origin $GIT_BRANCH
+        git -C $APP_DIR checkout -q FETCH_HEAD
+      else
+        git clone --depth 1 --branch $GIT_BRANCH $REPO_URL $APP_DIR
+      fi
+
+      # ----------------------------------------------------------------
+      # 6. Secrets
+      #    The password is read from SSM Parameter Store as a SecureString
+      #    and written into a 0600 .env that docker-compose.yml reads for
+      #    its variable substitution. It is never printed: the value is
+      #    captured into a variable, written straight to the file, and the
+      #    variable is unset immediately afterwards.
+      # ----------------------------------------------------------------
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] reading database password from $PARAM_NAME"
+      DB_PASSWORD=$(aws ssm get-parameter \
+        --name "$PARAM_NAME" \
+        --region "$AWS_REGION" \
+        --with-decryption \
+        --query Parameter.Value \
+        --output text)
+      if [ -z "$DB_PASSWORD" ]; then
+        echo "ERROR: SSM parameter $PARAM_NAME returned an empty value" >&2
+        exit 1
+      fi
+
+      # `umask 077` makes the file root-only from the moment it exists.
+      umask 077
+      cat > $APP_DIR/.env <<ENVFILE
+      # Written by the EC2 bootstrap from SSM Parameter Store.
+      # Root-owned, mode 600. Never commit or copy this file.
+      DB_NAME=$DB_NAME
+      DB_USER=$DB_USER
+      DB_PASSWORD=$DB_PASSWORD
+      ENVFILE
+      chmod 600 $APP_DIR/.env
+      unset DB_PASSWORD
+      echo "wrote $APP_DIR/.env (mode 600, value not logged)"
+
+      # ----------------------------------------------------------------
+      # 7. Build and start the stack
+      #    Identical to `docker compose up -d --build` locally: postgres,
+      #    api and dashboard come up in that order, the database runs
+      #    schema.sql + seed.sql on first boot, and neither application
+      #    port 5432 is published to the host.
+      # ----------------------------------------------------------------
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] starting the Compose stack"
+      cd $APP_DIR
+      docker compose up -d --build
+      docker compose ps
+
+      # ----------------------------------------------------------------
+      # 8. Wait for the API health endpoint, exactly the check that was
+      #    verified locally: GET /health -> {"status": "ok", ...}
+      # ----------------------------------------------------------------
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] waiting for the API to report healthy"
+      for attempt in $(seq 1 60); do
+        if curl -fsS "http://127.0.0.1:$API_PORT/health" >/dev/null 2>&1; then
+          echo "API is healthy on port $API_PORT"
+          break
+        fi
+        if [ $attempt -eq 60 ]; then
+          echo "ERROR: API did not become healthy in time; see: docker compose -f $APP_DIR/docker-compose.yml logs" >&2
+          exit 1
+        fi
+        sleep 5
+      done
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] dashboard : http://<public-ip>:$DASHBOARD_PORT"
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] api       : http://<public-ip>:$API_PORT"
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] docs      : http://<public-ip>:$API_PORT/docs"
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] ===== bootstrap finished OK ====="
+
+runcmd:
+  # The stack itself is kept alive by the `restart: unless-stopped` policy
+  # already set on every service in docker-compose.yml, so no extra
+  # systemd unit is needed for container restarts or a reboot.
+  - [ bash, "-c", "/opt/jmi/bootstrap.sh" ]

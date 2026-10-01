@@ -1,0 +1,72 @@
+# ==========================================================
+# Job Market Intelligence & Skill Analytics Platform
+# infra/terraform/terraform.tfvars.example
+#
+# Copy this file to `terraform.tfvars` (git-ignored) and edit it, or
+# pass values as TF_VAR_<name> environment variables instead.
+#
+#     Copy-Item terraform.tfvars.example terraform.tfvars    # PowerShell
+#     cp terraform.tfvars.example terraform.tfvars            # Linux/macOS
+#
+# This example contains PLACEHOLDERS ONLY - no real passwords or keys.
+# It is safe to commit.
+# ==========================================================
+
+# ---- region and naming --------------------------------------------------
+aws_region  = "ap-south-1"
+project_name = "job-market-intelligence"
+environment  = "demo"
+
+# ---- size ---------------------------------------------------------------
+# t3.micro is too small for postgres + api + dashboard together.
+instance_type      = "t3.small"
+root_volume_size_gb = 30
+
+# ---- source code deployed by user-data ----------------------------------
+# Must be reachable without credentials (public repository).
+repo_url   = "https://github.com/Tejaswini8888/Job-Market-Intelligence.git"
+git_branch = "main"
+app_dir    = "/opt/job-market-intelligence"
+
+# ---- database -----------------------------------------------------------
+# Matches POSTGRES_DB / DB_NAME in docker-compose.yml.
+db_name = "job_market_intelligence"
+db_user = "postgres"
+
+# db_password has NO default anywhere in this project, on purpose.
+#
+# Never write it in this file and never commit it: `*.tfvars` is already
+# excluded by .gitignore, but the safest option is an environment
+# variable for a single command:
+#
+#     $env:TF_VAR_db_password = "<a long random password>"     # PowerShell
+#     TF_VAR_db_password='<a long random password>' terraform plan
+#
+# Generate one with:
+#     python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# ---- inbound access -----------------------------------------------------
+app_allowed_cidrs = ["0.0.0.0/0"]
+enable_ssh        = true
+# Narrow this to your own address whenever possible:
+ssh_allowed_cidrs = ["203.0.113.10/32"]
+api_port          = 8000
+dashboard_port    = 8501
+
+# ---- fixed address ------------------------------------------------------
+associate_public_ip = true
+enable_elastic_ip   = true
+
+# ---- SSH key ------------------------------------------------------------
+# Either inline:
+# ssh_public_key = "ssh-ed25519 AAAAC3... you@laptop"
+# ...or leave it out and point at the file (default ~/.ssh/id_ed25519.pub):
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+
+# ---- tags ---------------------------------------------------------------
+tags = {
+  Project    = "job-market-intelligence"
+  Stack      = "ec2-docker-compose"
+  Owner      = "your-github-handle"
+  CostCenter = "portfolio"
+}

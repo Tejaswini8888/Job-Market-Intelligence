@@ -183,7 +183,6 @@ docker/local/
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
 
 # Local Docker runtime data (never part of the source tree)
 volumes/

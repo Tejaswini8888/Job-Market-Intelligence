@@ -48,7 +48,7 @@ Do not add one.
 
 ## Prerequisites
 
-1. **Terraform >= 1.5.0** - <https://developer.hashicorp.com/terraform/downloads>
+1. **Terraform >= 1.10.0** - <https://developer.hashicorp.com/terraform/downloads>
 2. **AWS CLI v2** with a configured identity (profile, SSO, or
    environment variables). Terraform uses the standard credential chain;
    **no keys are stored in this directory**.
@@ -103,38 +103,111 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 ---
 
-## State handling
+## Remote state
 
-`versions.tf` declares an **empty** `backend "s3" {}` on purpose: no
-bucket is hardcoded and no state can be created by accident. For local
-validation always initialise with `-backend=false`.
+### Why state has to leave the laptop
 
-For a real deployment use an encrypted, versioned S3 backend, either by
-editing the block or with a separate file:
+Terraform state is the memory of the deployment: the IDs of every EC2
+instance, security group, IAM role and SSM parameter, plus the value of
+every input. Without it Terraform cannot tell the difference between
+"already created" and "must create", so a lost or wiped state file makes
+the next run try to build duplicates.
+
+Two facts make local state unacceptable for this project:
+
+* **It contains a secret.** `var.db_password` is written into
+  `aws_ssm_parameter.db_password`, so the plaintext password is stored in
+  state. A file on a laptop, in a backup, or in a synced folder leaks it.
+* **It cannot be shared.** Each developer and every CI run needs the same
+  state, otherwise two runs fight over the same resources.
+
+The three acceptable answers are a private S3 bucket (used here), a
+private Terraform Cloud workspace, or Consul. This project uses S3.
+
+### Why the state bucket must be configured by hand
+
+The bucket is **not** created by this configuration. A Terraform backend
+cannot manage its own bucket: the bucket must exist before the backend can
+be initialised, and a configuration that created the bucket would have to
+store its state somewhere else to begin with. So it is created once,
+manually, in the AWS Console or with the CLI.
+
+Create it with all four of these:
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Block public access | **all four settings ON** | State is world-readable damage. No "public" anything. |
+| Bucket versioning | **enabled** | Every accidental overwrite or deletion is recoverable. Strongly recommended by HashiCorp. |
+| Default encryption | **SSE-S3** (or SSE-KMS with a key you control) | The password inside state is unreadable at rest. |
+| Object ACLs | leave disabled | Modern S3 ignores ACLs; BlockPublicAcls stays meaningful. |
+
+Add a lifecycle rule that expires *non-current* versions after ~90 days if
+cost matters. Never add a rule that could expire the current version.
+
+### State locking with `use_lockfile = true`
+
+Two people running `terraform apply` at the same time can corrupt state.
+Locking makes the second run fail instead.
 
 ```hcl
-# backend.hcl - keep this local, do not commit real bucket names if private
-bucket         = "my-terraform-state"
-key            = "job-market-intelligence/ec2/terraform.tfstate"
-region         = "ap-south-1"
-encrypt        = true
-use_lockfile   = true   # S3-native locking, Terraform >= 1.10
+use_lockfile = true   # S3-native locking, requires Terraform >= 1.10
 ```
 
+Before any write, Terraform creates a `<key>.tflock` object beside the
+state and deletes it afterwards, using conditional writes so exactly one
+runner wins. This project pins `required_version = ">= 1.10.0"`, so
+Terraform refuses to run on anything older; the version used to validate
+this configuration was 1.13.1.
+
+**No DynamoDB table is used.** DynamoDB locking is deprecated and is not
+needed here. The IAM principal needs `s3:GetObject`, `s3:PutObject` and
+`s3:DeleteObject` on `<key>.tflock` in addition to the state object
+itself.
+
+### `backend.hcl` is local and must never be committed
+
+`versions.tf` declares an **empty** `backend "s3" {}` on purpose: no bucket
+name is hardcoded, and nothing can accidentally initialise a remote
+backend. The real values are supplied at init time from `backend.hcl`, a
+file that lives only on your machine:
+
 ```powershell
+Copy-Item backend.hcl.example backend.hcl   # then edit your own values
+```
+
+The repository root `.gitignore` ignores both `infra/terraform/backend.hcl`
+and `backend.hcl`, and `.gitignore` also already ignores
+`terraform.tfstate`, `terraform.tfstate.backup`, `.terraform/` and
+`*.tfvars`. `.terraform.lock.hcl` is the deliberate exception: it holds
+only provider versions and checksums, contains no secrets, and **is**
+committed so every machine resolves the same AWS provider.
+
+`backend.hcl.example` in this directory is the committed template. It holds
+placeholders only - no bucket name, no account id, no credential, no
+personal IP.
+
+### The command that will be used later
+
+Once the bucket exists and `backend.hcl` has been filled in:
+
+```powershell
+cd infra/terraform
 terraform init -backend-config=backend.hcl
 ```
 
-Add `terraform.tfstate`, `terraform.tfstate.backup`, `.terraform/` and
-`*.tfvars` to `.gitignore` if they are not already - this repository's
-`.gitignore` already excludes all four.
+This performs the real initialisation. It contacts AWS, so it is
+deliberately not run as part of local validation. Until then:
 
-One exception worth knowing: that same `.gitignore` also excludes
-`.terraform.lock.hcl`. HashiCorp's guidance is to **commit** the lock
-file, because it pins the provider version so every machine and CI run
-resolves the same AWS provider. If you want that guarantee, remove that
-one line from the root `.gitignore` and commit the lock file produced by
-`terraform init`. It contains no secrets.
+```powershell
+terraform init -backend=false   # providers only, never touches a backend
+```
+
+The calling IAM principal needs, scoped to the exact key prefix:
+`s3:ListBucket` on the bucket, `s3:GetObject` + `s3:PutObject` on the
+state object, and `s3:GetObject` + `s3:PutObject` +
+`s3:DeleteObject` on the lockfile. Set `allowed_account_ids` in
+`backend.hcl` so a misconfigured profile cannot write state into the wrong
+account.
 
 ---
 

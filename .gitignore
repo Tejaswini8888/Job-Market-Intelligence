@@ -183,6 +183,9 @@ docker/local/
 *.tfstate
 *.tfstate.*
 .terraform/
+# Remote-state backend settings: local only, they name a real bucket.
+infra/terraform/backend.hcl
+backend.hcl
 
 # Local Docker runtime data (never part of the source tree)
 volumes/

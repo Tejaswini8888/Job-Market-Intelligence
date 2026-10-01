@@ -1,0 +1,63 @@
+# ==========================================================
+# Job Market Intelligence & Skill Analytics Platform
+# infra/terraform/backend.hcl.example
+#
+# TEMPLATE for the Terraform remote-state backend. Copy it to
+# `backend.hcl` in this directory, fill in your own values, and never
+# commit the copy:
+#
+#     Copy-Item backend.hcl.example backend.hcl    # PowerShell
+#     cp backend.hcl.example backend.hcl            # Linux/macOS
+#
+# `backend.hcl` is ignored by the repository root .gitignore, so it stays
+# on your machine. Everything in this file is a PLACEHOLDER: no real
+# bucket name, no account id, no credential, no personal IP.
+#
+# This file is read by Terraform, not by Terraform itself - it is NOT
+# HCL resource syntax and is not validated by `terraform validate`.
+# `terraform init` consumes it via -backend-config and caches the values
+# in .terraform/, which is also ignored.
+# ==========================================================
+
+# ---- bucket --------------------------------------------------------------
+# Must already exist. Create it by hand (Console or CLI) with:
+#   * all four "Block public access" settings ON
+#   * bucket versioning ENABLED
+#   * default encryption ON (SSE-S3, or SSE-KMS with a key you control)
+# Globally unique name, lowercase, no underscores.
+bucket = "REPLACE_WITH_YOUR_UNIQUE_STATE_BUCKET"
+
+# ---- state key -----------------------------------------------------------
+# Object path INSIDE the bucket. Keep it scoped by project and environment
+# so a staging run can never overwrite a production state file. Non-default
+# workspaces are stored under "<workspace_key_prefix>/<workspace>/<key>".
+key = "job-market-intelligence/prod/terraform.tfstate"
+
+# ---- region --------------------------------------------------------------
+# Must match the bucket's own region. The application region is ap-south-1
+# (see var.aws_region), but the state bucket may legitimately live in
+# another one.
+region = "ap-south-1"
+
+# ---- encryption ----------------------------------------------------------
+# Server-side encryption of the state object. The state file holds the
+# database password (as SSM parameter value), so this is mandatory.
+encrypt = true
+
+# ---- state locking -------------------------------------------------------
+# S3-native locking: Terraform writes a <key>.tflock object next to the
+# state before a write and removes it afterwards, so two concurrent
+# applies cannot clobber each other. Requires Terraform >= 1.10.
+#
+# No DynamoDB table is needed or wanted.
+use_lockfile = true
+
+# ---- optional ------------------------------------------------------------
+# Use a customer-managed KMS key instead of SSE-S3. If you set this, the
+# principal running Terraform also needs kms:Encrypt, kms:Decrypt and
+# kms:GenerateDataKey on that key.
+# kms_key_id = "arn:aws:kms:<region>:<account-id>:key/<key-id>"
+
+# Pin the account so a misconfigured profile cannot write state into the
+# wrong account. Substitute your own 12-digit account id.
+# allowed_account_ids = ["REPLACE_WITH_YOUR_12_DIGIT_ACCOUNT_ID"]

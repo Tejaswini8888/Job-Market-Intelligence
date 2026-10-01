@@ -12,9 +12,11 @@
 # ==========================================================
 
 terraform {
-  # >= 1.5 keeps lifecycle preconditions and try()/coalesce() behaviour
-  # stable, which variables.tf and ec2.tf both rely on.
-  required_version = ">= 1.5.0"
+  # >= 1.10 is required by the S3 backend: state locking uses the native
+  # lockfile (use_lockfile = true, see backend.hcl.example), which did not
+  # exist before 1.10. It also keeps lifecycle preconditions and
+  # try()/coalesce() behaviour stable, which variables.tf and ec2.tf rely on.
+  required_version = ">= 1.10.0"
 
   required_providers {
     aws = {

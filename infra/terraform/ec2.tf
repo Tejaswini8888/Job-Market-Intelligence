@@ -15,15 +15,19 @@
 # docker-compose.yml.
 # ==========================================================
 
-# Canonical's official Ubuntu 24.04 LTS (noble) server image.
-# 099720109477 is Canonical's AWS account id.
+# Canonical Ubuntu 24.04 LTS (Noble) AMD64 server image.
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"]
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-noble-24.04-amd64-server-*"]
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
   }
 
   filter {
@@ -78,6 +82,7 @@ resource "aws_eip_association" "app" {
 }
 
 # ------------------------------------------------------------
+# ------------------------------------------------------------
 # The instance
 # ------------------------------------------------------------
 resource "aws_instance" "app" {
@@ -108,17 +113,12 @@ resource "aws_instance" "app" {
   user_data                   = templatefile("${path.module}/user_data.tftpl", local.user_data_vars)
   user_data_replace_on_change = true
 
-  # The bootstrap reads the database password from SSM at boot, but the
-  # parameter NAME is only interpolated into user_data as a plain string
-  # (via locals.user_data_vars), which creates no implicit dependency.
-  # Without this edge Terraform would create the instance and the SSM
-  # parameter concurrently, and an instance that boots first would fail
-  # `aws ssm get-parameter` with ParameterNotFound and abort cloud-init.
+  # The bootstrap reads the database password from SSM at boot.
+  # The explicit dependency ensures the parameter exists before
+  # the instance starts.
   depends_on = [aws_ssm_parameter.db_password]
 
-  # IMDSv2 only. The instance reads its own credentials through this
-  # endpoint to fetch the database password from SSM, so it must stay
-  # reachable, but hop limit 1 means it cannot be queried from off-box.
+  # IMDSv2 only.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -131,6 +131,10 @@ resource "aws_instance" "app" {
   })
 
   lifecycle {
+    ignore_changes = [
+      associate_public_ip_address
+    ]
+
     precondition {
       condition     = local.ssh_public_key != null
       error_message = "No SSH public key found. Set var.ssh_public_key to the contents of your id_ed25519.pub, or point var.ssh_public_key_path at that file."

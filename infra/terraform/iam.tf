@@ -92,15 +92,19 @@ resource "aws_iam_instance_profile" "app" {
 # The secret itself
 # ------------------------------------------------------------
 resource "aws_ssm_parameter" "db_password" {
-  name        = local.db_password_parameter_name
+  name        = "/${local.name_prefix}/db_password"
+  description = "PostgreSQL password for job_market_intelligence on job-market-intelligence-demo. Read at boot by the EC2 host."
   type        = "SecureString"
   value       = var.db_password
-  tier        = "Standard"
-  description = "PostgreSQL password for ${var.db_name} on ${local.name_prefix}. Read at boot by the EC2 host."
+
+  lifecycle {
+    ignore_changes = [value]
+  }
 
   tags = merge(local.common_tags, {
-    Name = local.db_password_parameter_name
+    Name = "/${local.name_prefix}/db_password"
   })
+
 
   # Rotating the password in tfvars replaces the value in place; the
   # parameter ARN stays stable so the instance role keeps working.

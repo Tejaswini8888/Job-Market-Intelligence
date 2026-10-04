@@ -39,7 +39,7 @@ data "aws_iam_policy_document" "github_deploy_assume_role" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:Tejaswini8888/Job-Market-Intelligence:ref:refs/heads/main"
+        "repo:Tejaswini8888@154421074/Job-Market-Intelligence@1394870909:ref:refs/heads/main"
       ]
     }
   }

@@ -190,18 +190,20 @@ The Grafana dashboard, **JMI Infrastructure Monitoring**, includes panels for:
 - Container CPU usage
 - Container memory utilization
 - Prometheus target health
+### 📊 Infrastructure Monitoring Dashboard
+
 ![JMI Infrastructure Monitoring](docs/images/jmi-infrastructure-monitoring.png)
-Metrics visualized:
 
-- CPU utilization
+🔗 **[View Grafana Monitoring Dashboard](https://snapshots.raintank.io/dashboard/snapshot/FyMoKbLZjuQzjnwCMUfjQLbXMCcwu0Ab?from=2026-10-10T19%3A18%3A27.419Z&to=2026-10-11T11%3A18%3A27.419Z&timezone=browser&var-DS_PROMETHEUS=dg0pkq024jif4a)**
 
-- Memory utilization
-
+The dashboard monitors:
+- CPU and memory utilization
 - Root filesystem disk usage
+- Network traffic
+- Container CPU and memory
+- Prometheus monitoring target health
 
-- Incoming network traffic
-
-The monitoring stack is deployed using Docker Compose, with Grafana accessed securely through AWS Systems Manager port forwarding.
+> **Note:** The Grafana link displays a read-only snapshot, not live metrics. The screenshot is available directly in this repository.
 
 ### Secure Grafana Access
 

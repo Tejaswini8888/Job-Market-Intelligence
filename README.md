@@ -192,7 +192,7 @@ The Grafana dashboard, **JMI Infrastructure Monitoring**, includes panels for:
 - Prometheus target health
 ### 📊 Infrastructure Monitoring Dashboard
 
-![JMI Infrastructure Monitoring](docs/images/jmi-infrastructure-monitoring.png)
+![JMI Infrastructure Monitoring](images/jmi-infrastructure-monitoring.png)
 
 🔗 **[View Grafana Monitoring Dashboard](https://snapshots.raintank.io/dashboard/snapshot/FyMoKbLZjuQzjnwCMUfjQLbXMCcwu0Ab?from=2026-10-10T19%3A18%3A27.419Z&to=2026-10-11T11%3A18%3A27.419Z&timezone=browser&var-DS_PROMETHEUS=dg0pkq024jif4a)**
 
